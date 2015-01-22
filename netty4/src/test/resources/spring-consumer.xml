@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:dubbo="http://code.alibabatech.com/schema/dubbo" xmlns="http://www.springframework.org/schema/beans"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd http://code.alibabatech.com/schema/dubbo http://code.alibabatech.com/schema/dubbo/dubbo.xsd">
+    <dubbo:application name="Netty4-client"/>
+    <dubbo:registry address="multicast://224.2.4.5:2323" transporter="netty4"/>
+
+    <dubbo:reference id="demo" interface="com.github.daviszhao.dubboext.transporter.netty4.DemoService"/>
+</beans>

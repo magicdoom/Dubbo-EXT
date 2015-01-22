@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:dubbo="http://code.alibabatech.com/schema/dubbo" xmlns="http://www.springframework.org/schema/beans"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd http://code.alibabatech.com/schema/dubbo http://code.alibabatech.com/schema/dubbo/dubbo.xsd">
+    <bean id="demo" class="com.github.daviszhao.dubboext.transporter.netty4.DemoServiceImpl"/>
+    <dubbo:application name="Netty4-tester"/>
+    <dubbo:registry address="multicast://224.2.4.5:2323" transporter="netty4"/>
+    <dubbo:protocol port="2056" transporter="netty4" threads="100"/>
+    <dubbo:service interface="com.github.daviszhao.dubboext.transporter.netty4.DemoService" ref="demo"/>
+</beans>

@@ -1,0 +1,1 @@
+netty4=com.github.daviszhao.dubboext.transporter.netty4.NettyTransporter
