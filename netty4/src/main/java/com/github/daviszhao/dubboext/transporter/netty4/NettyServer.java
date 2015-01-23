@@ -15,17 +15,21 @@
  */
 package com.github.daviszhao.dubboext.transporter.netty4;
 
+import com.alibaba.dubbo.common.Constants;
 import com.alibaba.dubbo.common.URL;
 import com.alibaba.dubbo.common.utils.ExecutorUtil;
+import com.alibaba.dubbo.common.utils.NamedThreadFactory;
 import com.alibaba.dubbo.common.utils.NetUtils;
 import com.alibaba.dubbo.remoting.Channel;
 import com.alibaba.dubbo.remoting.ChannelHandler;
 import com.alibaba.dubbo.remoting.RemotingException;
 import com.alibaba.dubbo.remoting.Server;
 import com.alibaba.dubbo.remoting.transport.AbstractServer;
-import com.alibaba.dubbo.remoting.transport.dispather.ChannelHandlers;
+import com.alibaba.dubbo.remoting.transport.dispatcher.ChannelHandlers;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.*;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -50,9 +54,10 @@ public class NettyServer extends AbstractServer implements Server {
 
     private Map<String, Channel> channels; // <ip:port, channel>
 
-    private ServerBootstrap bootstrap;
 
     private io.netty.channel.Channel channel;
+    private NioEventLoopGroup boss;
+    private NioEventLoopGroup worker;
 
     public NettyServer(URL url, ChannelHandler handler) throws RemotingException {
         super(url, ChannelHandlers.wrap(handler, ExecutorUtil.setThreadName(url, SERVER_THREAD_POOL_NAME)));
@@ -63,86 +68,75 @@ public class NettyServer extends AbstractServer implements Server {
         final NettyHandler handler = new NettyHandler(getUrl(), this);
         channels = handler.getChanels();
 
-        bootstrap = new ServerBootstrap();
-        NioEventLoopGroup boss = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors());
-        NioEventLoopGroup worker = new NioEventLoopGroup(Runtime.getRuntime().availableProcessors() * 2);
+        ServerBootstrap bootstrap = new ServerBootstrap();
+        boss = new NioEventLoopGroup(1, new NamedThreadFactory("NettyBossServer", true));
+        worker = new NioEventLoopGroup(getUrl().getPositiveParameter(Constants.IO_THREADS_KEY, Constants.DEFAULT_IO_THREADS));
 
-        bootstrap.option(ChannelOption.SO_KEEPALIVE, true);
-        bootstrap.option(ChannelOption.TCP_NODELAY, true);
-        bootstrap.option(ChannelOption.SO_BACKLOG, 128);
-
-        bootstrap.group(boss, worker).channel(NioServerSocketChannel.class).childHandler(new ChannelInitializer<SocketChannel>() {
-            @Override
-            protected void initChannel(SocketChannel ch) throws Exception {
-                ChannelPipeline pipeline = ch.pipeline();
-                NettyCodecAdapter adapter = new NettyCodecAdapter(getCodec(), getUrl(), NettyServer.this);
-                pipeline.addLast("decoder", adapter.getDecoder());
-                pipeline.addLast("encoder", adapter.getEncoder());
-                pipeline.addLast("writeHandler", new ChannelOutboundHandlerAdapter() {
+        bootstrap.group(boss, worker)
+                .channel(NioServerSocketChannel.class)
+                .childOption(ChannelOption.TCP_NODELAY, false)
+                .childOption(ChannelOption.SO_KEEPALIVE, true)
+                .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
-                    public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-                        super.write(ctx, msg, promise);
-                        NettyChannel nettyChannel = NettyChannel.getOrAddChannel(ctx.channel(), getUrl(), NettyServer.this);
-                        try {
-//                            NettyServer.this.send(nettyChannel, msg);
-                            nettyChannel.send(msg);
-                        } finally {
-                            NettyChannel.removeChannelIfDisconnected(ctx.channel());
-                        }
-
+                    protected void initChannel(SocketChannel ch) throws Exception {
+                        ChannelPipeline pipeline = ch.pipeline();
+                        NettyCodecAdapter adapter = new NettyCodecAdapter(getCodec(), getUrl(), NettyServer.this);
+                        pipeline.addLast("decoder", adapter.getDecoder());
+                        pipeline.addLast("encoder", adapter.getEncoder());
+                        pipeline.addLast("handler", handler);
                     }
                 });
-                pipeline.addLast("handler", handler);
-            }
-        });
-
-        channel = bootstrap.bind(getBindAddress()).sync().channel();
+//bind
+        channel = bootstrap.bind(getBindAddress()).awaitUninterruptibly().channel();
     }
 
 
     @Override
     protected void doClose() throws Throwable {
-        logger.debug("---Server closed---");
 
-//        try {
-//            if (channel != null) {
-//                // unbind.
-//                channel.close();
-//            }
-//        } catch (Throwable e) {
-//            logger.warn(e.getMessage(), e);
-//        }
-//        try {
-//            Collection<Channel> channels = getChannels();
-//            if (channels != null && channels.size() > 0) {
-//                for (Channel channel : channels) {
-//                    try {
-//                        channel.close();
-//                    } catch (Throwable e) {
-//                        logger.warn(e.getMessage(), e);
-//                    }
-//                }
-//            }
-//        } catch (Throwable e) {
-//            logger.warn(e.getMessage(), e);
-//        }
-//
-//        try {
-//            if (channels != null) {
-//                channels.clear();
-//            }
-//        } catch (Throwable e) {
-//            logger.warn(e.getMessage(), e);
-//        }
-        EventLoopGroup workerGroup = bootstrap.childGroup();
-        EventLoopGroup bossGroup = bootstrap.group();
+        try {
+            if (channel != null) {
+                // unbind.
+                channel.close().syncUninterruptibly();
+            }
+        } catch (Throwable e) {
+            logger.warn(e.getMessage(), e);
+        }
+        try {
+            Collection<com.alibaba.dubbo.remoting.Channel> channels = getChannels();
+            if (channels != null && channels.size() > 0) {
+                for (com.alibaba.dubbo.remoting.Channel channel : channels) {
+                    try {
+                        channel.close();
+                    } catch (Throwable e) {
+                        logger.warn(e.getMessage(), e);
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            logger.warn(e.getMessage(), e);
+        }
 
-        workerGroup.shutdownGracefully();
-        bossGroup.shutdownGracefully();
+        try {
+            // and then shutdown the thread pools
+            if (boss != null) {
+                boss.shutdownGracefully();
+            }
+            if (worker != null) {
+                worker.shutdownGracefully();
+            }
+        } catch (Throwable e) {
+            logger.warn(e.getMessage(), e);
+        }
 
-        bossGroup.terminationFuture().sync();
-        workerGroup.terminationFuture().sync();
-        logger.debug("---Server really closed---");
+        try {
+            if (channels != null) {
+                channels.clear();
+            }
+        } catch (Throwable e) {
+            logger.warn(e.getMessage(), e);
+        }
+        logger.debug("---Server  closed---");
     }
 
     public Collection<Channel> getChannels() {
@@ -162,7 +156,7 @@ public class NettyServer extends AbstractServer implements Server {
     }
 
     public boolean isBound() {
-        return channel.isActive();
+        return channel.isRegistered();
     }
 
 }
