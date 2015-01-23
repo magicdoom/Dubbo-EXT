@@ -21,7 +21,11 @@
         <junit.version>4.11</junit.version>
     </properties>
     <packaging>pom</packaging>
-
+    <scm>
+        <connection>scm:git:https://github.com/daviszhao/Dubbo-EXT.git</connection>
+        <url>scm:git:https://github.com/daviszhao/Dubbo-EXT.git</url>
+        <developerConnection>scm:git:https://github.com/daviszhao/Dubbo-EXT.git</developerConnection>
+    </scm>
     <dependencies>
         <dependency>
             <groupId>com.alibaba</groupId>
@@ -146,5 +150,12 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-release-plugin</artifactId>
+                <version>2.5.1</version>
+            </plugin>
+        </plugins>
     </build>
 </project>
