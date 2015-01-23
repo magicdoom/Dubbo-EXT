@@ -4,7 +4,7 @@
 
     <groupId>com.github.daviszhao.dubbo-ext</groupId>
     <artifactId>base</artifactId>
-    <version>0.8</version>
+    <version>0.9-SNAPSHOT</version>
     <name>dubboExtsions</name>
     <description>extensions to alibaba Dubbo</description>
     <url>https://github.com/daviszhao/Dubbo-EXT</url>
@@ -44,7 +44,7 @@
         <connection>scm:git:https://github.com/daviszhao/Dubbo-EXT</connection>
         <url>scm:git:https://github.com/daviszhao/Dubbo-EXT</url>
         <developerConnection>scm:git:https://github.com/daviszhao/Dubbo-EXT</developerConnection>
-        <tag>dubbo_ext-0.8</tag>
+        <tag>HEAD</tag>
     </scm>
     <distributionManagement>
         <snapshotRepository>
