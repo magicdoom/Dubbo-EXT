@@ -20,6 +20,7 @@ import com.alibaba.dubbo.common.URL;
 import com.alibaba.dubbo.remoting.ChannelHandler;
 import com.alibaba.dubbo.remoting.RemotingException;
 import com.alibaba.dubbo.remoting.transport.AbstractChannel;
+import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,13 +39,13 @@ final class NettyChannel extends AbstractChannel {
 
     private static final Logger logger = LoggerFactory.getLogger(NettyChannel.class);
 
-    private static final ConcurrentMap<io.netty.channel.Channel, NettyChannel> channelMap = new ConcurrentHashMap<>();
+    private static final ConcurrentMap<Channel, NettyChannel> channelMap = new ConcurrentHashMap<>();
 
-    private final io.netty.channel.Channel channel;
+    private final Channel channel;
 
     private final Map<String, Object> attributes = new ConcurrentHashMap<>();
 
-    private NettyChannel(io.netty.channel.Channel channel, URL url, ChannelHandler handler) {
+    private NettyChannel(Channel channel, URL url, ChannelHandler handler) {
         super(url, handler);
         if (channel == null) {
             throw new IllegalArgumentException("netty channel == null;");
@@ -52,7 +53,7 @@ final class NettyChannel extends AbstractChannel {
         this.channel = channel;
     }
 
-    static NettyChannel getOrAddChannel(io.netty.channel.Channel ch, URL url, ChannelHandler handler) {
+    static NettyChannel getOrAddChannel(Channel ch, URL url, ChannelHandler handler) {
         if (ch == null) {
             return null;
         }
@@ -70,7 +71,7 @@ final class NettyChannel extends AbstractChannel {
         return ret;
     }
 
-    static void removeChannelIfDisconnected(io.netty.channel.Channel ch) {
+    static void removeChannelIfDisconnected(Channel ch) {
 //        if (ch != null && ! ch.isConnected()) {
         if (ch != null && !ch.isActive()) {
             channelMap.remove(ch);
@@ -80,18 +81,15 @@ final class NettyChannel extends AbstractChannel {
 
     public InetSocketAddress getLocalAddress() {
         return (InetSocketAddress) channel.localAddress();
-//        return (InetSocketAddress) channel.getLocalAddress();
     }
 
     public InetSocketAddress getRemoteAddress() {
         return (InetSocketAddress) channel.remoteAddress();
-//        return (InetSocketAddress) channel.getRemoteAddress();
     }
 
     public boolean isConnected() {
 
         return channel.isActive();
-//        return channel.isConnected();
     }
 
     public void send(Object message, boolean sent) throws RemotingException {
@@ -100,13 +98,12 @@ final class NettyChannel extends AbstractChannel {
         boolean success = true;
         int timeout = 0;
         try {
-            ChannelFuture future = channel.write(message);
+            ChannelFuture future = channel.writeAndFlush(message);
             if (sent) {
                 timeout = getUrl().getPositiveParameter(Constants.TIMEOUT_KEY, Constants.DEFAULT_TIMEOUT);
-                success = future.await(timeout);
+                success = future.syncUninterruptibly().await(timeout);
             }
             Throwable cause = future.cause();
-//            Throwable cause = future.getCause();
             if (cause != null) {
                 throw cause;
             }
